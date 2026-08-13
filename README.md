@@ -4,7 +4,7 @@
 
 Point it at any folder of `.md` files. Each note becomes a stone. Each folder becomes a rock island in raked sand. Newer notes are darker ink; older ones weather and fade. The layout is deterministic — your garden always looks like *your* garden.
 
-![demo](docs/demo.gif)
+![karesansui](docs/screenshot.png)
 
 ## Why
 
@@ -18,7 +18,7 @@ Every note-taking tool shows you a list. Lists are inventories. A garden is a *p
 ## Quickstart
 
 ```bash
-git clone https://github.com/YOURNAME/karesansui.git
+git clone https://github.com/kusonch9501-afk/karesansui.git
 cd karesansui
 python3 server.py            # opens the bundled sample garden
 python3 server.py ~/notes    # opens YOUR garden
