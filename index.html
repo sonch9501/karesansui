@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>枯山水 — karesansui</title>
+<style>
+  :root {
+    --sand: #efe9dc;
+    --sand-deep: #e6ded0;
+    --ink: #35322c;
+    --ink-soft: #6b6555;
+    --line: #d8cdb6;
+    --accent: #7a8463;
+    --paper: #f7f3ea;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    background: var(--sand);
+    color: var(--ink);
+    font-family: "Hiragino Mincho ProN", "Yu Mincho", "Noto Serif JP", Georgia, serif;
+  }
+  #garden { display: block; cursor: default; }
+
+  header {
+    position: fixed; top: 0; left: 0; right: 0;
+    display: flex; align-items: baseline; gap: 14px;
+    padding: 22px 28px; pointer-events: none;
+  }
+  header h1 { font-size: 22px; font-weight: 500; letter-spacing: .35em; }
+  header .sub { font-size: 12px; color: var(--ink-soft); letter-spacing: .12em; }
+  header .count { margin-left: auto; font-size: 12px; color: var(--ink-soft); }
+
+  #search {
+    position: fixed; top: 18px; right: 28px; width: 220px;
+    padding: 7px 12px; font: inherit; font-size: 13px;
+    background: transparent; color: var(--ink);
+    border: none; border-bottom: 1px solid var(--line);
+    outline: none; transition: border-color .25s, width .25s;
+  }
+  #search:focus { border-color: var(--ink-soft); width: 280px; }
+  #search::placeholder { color: #b3a98f; letter-spacing: .1em; }
+
+  #legend {
+    position: fixed; bottom: 0; left: 0; right: 0;
+    display: flex; flex-wrap: wrap; gap: 4px 22px;
+    padding: 16px 28px; font-size: 12px; color: var(--ink-soft);
+  }
+  #legend span { cursor: pointer; letter-spacing: .08em; transition: color .2s; }
+  #legend span:hover, #legend span.active { color: var(--ink); }
+  #legend i { font-style: normal; opacity: .6; margin-left: 4px; font-size: 11px; }
+
+  #tip {
+    position: fixed; pointer-events: none; display: none;
+    max-width: 300px; padding: 10px 14px;
+    background: var(--paper); border: 1px solid var(--line);
+    box-shadow: 2px 3px 0 rgba(90,80,60,.08);
+    font-size: 12.5px; line-height: 1.55; z-index: 5;
+  }
+  #tip .t { font-size: 13.5px; }
+  #tip .d { color: var(--ink-soft); font-size: 11px; margin-top: 2px; letter-spacing: .05em; }
+  #tip .e { color: var(--ink-soft); margin-top: 6px; }
+
+  #panel {
+    position: fixed; top: 0; right: 0; bottom: 0; width: min(460px, 92vw);
+    background: var(--paper); border-left: 1px solid var(--line);
+    transform: translateX(102%); transition: transform .3s cubic-bezier(.2,.7,.2,1);
+    display: flex; flex-direction: column; z-index: 10;
+    box-shadow: -6px 0 24px rgba(80,70,50,.07);
+  }
+  #panel.open { transform: translateX(0); }
+  #panel .bar {
+    display: flex; align-items: center; gap: 10px;
+    padding: 16px 22px 12px; border-bottom: 1px solid var(--line);
+  }
+  #panel .bar .path { font-size: 11px; color: var(--ink-soft); overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; flex: 1; letter-spacing: .03em; }
+  #panel .bar button {
+    border: none; background: none; font: inherit; font-size: 18px;
+    color: var(--ink-soft); cursor: pointer; line-height: 1;
+  }
+  #panel .bar button:hover { color: var(--ink); }
+  #content { padding: 24px 28px 60px; overflow-y: auto; line-height: 1.85; font-size: 14.5px; }
+  #content h1 { font-size: 21px; margin: 0 0 14px; font-weight: 600; }
+  #content h2 { font-size: 17px; margin: 26px 0 8px; font-weight: 600;
+    border-bottom: 1px solid var(--line); padding-bottom: 4px; }
+  #content h3 { font-size: 15px; margin: 18px 0 6px; font-weight: 600; }
+  #content p { margin: 10px 0; }
+  #content ul, #content ol { margin: 8px 0 8px 22px; }
+  #content li { margin: 3px 0; }
+  #content blockquote { border-left: 3px solid var(--line); padding-left: 14px;
+    color: var(--ink-soft); margin: 10px 0; }
+  #content code { font-family: ui-monospace, Menlo, monospace; font-size: .88em;
+    background: var(--sand-deep); padding: 1px 5px; }
+  #content pre { background: var(--sand-deep); padding: 12px 14px; overflow-x: auto; margin: 12px 0; }
+  #content pre code { background: none; padding: 0; }
+  #content a { color: var(--accent); }
+  #content hr { border: none; border-top: 1px solid var(--line); margin: 18px 0; }
+  #content .fm { font-size: 11px; color: var(--ink-soft); background: var(--sand-deep);
+    padding: 8px 12px; margin-bottom: 16px; white-space: pre-wrap; }
+
+  #empty {
+    position: fixed; inset: 0; display: none; align-items: center; justify-content: center;
+    flex-direction: column; gap: 10px; color: var(--ink-soft); text-align: center;
+  }
+  #empty .big { font-size: 40px; letter-spacing: .3em; color: var(--line); }
+</style>
+</head>
+<body>
+<canvas id="garden"></canvas>
+<header>
+  <h1>枯山水</h1>
+  <span class="sub" id="rootname"></span>
+  <span class="count" id="count"></span>
+</header>
+<input id="search" type="text" placeholder="search the garden…" autocomplete="off">
+<div id="legend"></div>
+<div id="tip"></div>
+<div id="panel">
+  <div class="bar">
+    <span class="path" id="ppath"></span>
+    <button id="pclose" title="close">×</button>
+  </div>
+  <div id="content"></div>
+</div>
+<div id="empty">
+  <div class="big">無</div>
+  <div>no markdown files found in this garden.<br>point the server at a folder of .md files:</div>
+  <code>python3 server.py ~/your/notes</code>
+</div>
+
+<script>
+"use strict";
+
+/* ---------- deterministic randomness ---------- */
+function mulberry32(a) {
+  return function() {
+    a |= 0; a = (a + 0x6D2B79F5) | 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function hashStr(s) {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return h >>> 0;
+}
+
+/* ---------- state ---------- */
+const canvas = document.getElementById("garden");
+const ctx = canvas.getContext("2d");
+let DPR = 1, W = 0, H = 0;
+let garden = null;          // api payload
+let clusters = [];          // {name, cx, cy, r, count, stones:[]}
+let stones = [];            // {x, y, r, entry, cluster, shade}
+let hovered = null;
+let query = "";
+let activeCategory = null;
+
+/* ---------- layout ---------- */
+function layout() {
+  clusters = []; stones = [];
+  if (!garden || !garden.entries.length) return;
+
+  const rand = mulberry32(garden.seed);
+  const byCat = new Map();
+  for (const e of garden.entries) {
+    if (!byCat.has(e.category)) byCat.set(e.category, []);
+    byCat.get(e.category).push(e);
+  }
+  const cats = [...byCat.entries()].sort((a, b) => b[1].length - a[1].length);
+
+  const mTop = 90, mBot = 70, mSide = 90;
+  const usableW = W - mSide * 2, usableH = H - mTop - mBot;
+  const total = garden.entries.length;
+
+  // place cluster centers with rejection sampling (deterministic)
+  const centers = [];
+  for (const [name, list] of cats) {
+    const frac = Math.sqrt(list.length / total);
+    const r = Math.max(34, Math.min(usableW, usableH) * 0.26 * frac + 26);
+    let best = null, bestScore = -1;
+    for (let attempt = 0; attempt < 60; attempt++) {
+      const x = mSide + r + rand() * (usableW - 2 * r);
+      const y = mTop + r + rand() * (usableH - 2 * r);
+      let minD = Infinity;
+      for (const c of centers) minD = Math.min(minD, Math.hypot(x - c.cx, y - c.cy) - c.r - r);
+      const score = centers.length ? minD : rand();
+      if (score > bestScore) { bestScore = score; best = { x, y }; }
+      if (minD > 40) break;
+    }
+    centers.push({ name, list, cx: best.x, cy: best.y, r });
+  }
+
+  const now = Date.now();
+  for (const c of centers) {
+    const cl = { name: c.name, cx: c.cx, cy: c.cy, r: c.r, count: c.list.length, stones: [] };
+    const n = c.list.length;
+    c.list.sort((a, b) => (a.date || "") < (b.date || "") ? -1 : 1);
+    for (let i = 0; i < n; i++) {
+      const e = c.list[i];
+      const er = mulberry32(hashStr(e.path));
+      const rad = c.r * 0.82 * Math.sqrt((i + 0.6) / n);
+      const ang = i * 2.39996 + er() * 0.9;
+      const x = c.cx + Math.cos(ang) * rad * (0.85 + er() * 0.3);
+      const y = c.cy + Math.sin(ang) * rad * (0.85 + er() * 0.3);
+      const density = Math.max(1, Math.min(2.1, 60 / total + 1));
+      const size = (5 + Math.min(12, Math.log2(1 + e.size / 250) * 3)) * density;
+      // newer entries are darker ink; undated sit mid-tone
+      let age = 0.5;
+      if (e.date) {
+        const days = (now - new Date(e.date).getTime()) / 864e5;
+        age = Math.max(0, Math.min(1, days / 720));
+      }
+      const stone = { x, y, r: size, entry: e, cluster: cl, age, rot: er() * Math.PI, blob: er() };
+      cl.stones.push(stone); stones.push(stone);
+    }
+    clusters.push(cl);
+  }
+}
+
+/* ---------- drawing ---------- */
+function drawSand() {
+  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--sand");
+  ctx.fillRect(0, 0, W, H);
+  // fine grain
+  const rand = mulberry32(garden ? garden.seed ^ 0x5eed : 1);
+  ctx.fillStyle = "rgba(120,105,80,0.045)";
+  const grains = Math.floor(W * H / 900);
+  for (let i = 0; i < grains; i++) {
+    ctx.fillRect(rand() * W, rand() * H, 1, 1);
+  }
+  // long rake lines, slightly wavy
+  ctx.strokeStyle = "rgba(150,135,105,0.22)";
+  ctx.lineWidth = 1;
+  const gap = 11;
+  for (let y = gap; y < H; y += gap) {
+    ctx.beginPath();
+    for (let x = 0; x <= W; x += 24) {
+      const yy = y + Math.sin(x * 0.008 + y * 0.35) * 1.6;
+      x === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
+    }
+    ctx.stroke();
+  }
+}
+
+function drawCluster(cl) {
+  const dim = shouldDim(cl);
+  // smooth sand pad under the island (erases raking)
+  const pad = cl.r + 10;
+  const g = ctx.createRadialGradient(cl.cx, cl.cy, cl.r * 0.3, cl.cx, cl.cy, pad + 26);
+  g.addColorStop(0, "rgba(239,233,220,1)");
+  g.addColorStop(1, "rgba(239,233,220,0)");
+  ctx.fillStyle = g;
+  ctx.beginPath(); ctx.arc(cl.cx, cl.cy, pad + 26, 0, 7); ctx.fill();
+
+  // concentric ripples
+  for (let k = 0; k < 4; k++) {
+    ctx.strokeStyle = `rgba(150,135,105,${(dim ? 0.05 : 0.19) - k * 0.035})`;
+    ctx.lineWidth = 1.1;
+    ctx.beginPath();
+    const rr = pad + 8 + k * 13;
+    for (let a = 0; a <= Math.PI * 2 + 0.05; a += 0.08) {
+      const wob = Math.sin(a * 5 + cl.cx) * 1.8;
+      const x = cl.cx + Math.cos(a) * (rr + wob);
+      const y = cl.cy + Math.sin(a) * (rr + wob);
+      a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+  }
+  // label
+  ctx.fillStyle = dim ? "rgba(107,101,85,0.25)" : "rgba(107,101,85,0.85)";
+  ctx.font = "12px 'Hiragino Mincho ProN','Yu Mincho',serif";
+  ctx.textAlign = "center";
+  ctx.fillText(cl.name, cl.cx, cl.cy + cl.r + 62 > H - 80 ? cl.cy - cl.r - 46 + 32 : cl.cy + cl.r + 56);
+}
+
+function stonePath(s, scale) {
+  ctx.beginPath();
+  const points = 8;
+  for (let i = 0; i <= points; i++) {
+    const a = s.rot + (i / points) * Math.PI * 2;
+    const wob = 0.78 + 0.28 * Math.sin(a * 3 + s.blob * 9) * Math.cos(a * 2 - s.blob * 5);
+    const x = s.x + Math.cos(a) * s.r * wob * scale;
+    const y = s.y + Math.sin(a) * s.r * wob * 0.86 * scale;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+
+function drawStone(s) {
+  const matched = matches(s.entry);
+  const dim = (query && !matched) || shouldDim(s.cluster);
+  const isHover = hovered === s;
+  const ink = 46 + s.age * 68;           // newer = darker
+  const alpha = dim ? 0.14 : 1;
+
+  // shadow
+  ctx.fillStyle = `rgba(90,80,60,${0.16 * alpha})`;
+  ctx.save(); ctx.translate(1.6, 2.2); stonePath(s, 1); ctx.fill(); ctx.restore();
+  // body
+  ctx.fillStyle = `rgba(${ink},${ink - 2},${ink - 6},${alpha})`;
+  stonePath(s, isHover ? 1.25 : 1); ctx.fill();
+  // top highlight
+  ctx.fillStyle = `rgba(255,252,240,${0.13 * alpha})`;
+  ctx.save(); ctx.translate(-s.r * 0.18, -s.r * 0.22); stonePath(s, (isHover ? 1.25 : 1) * 0.55); ctx.fill(); ctx.restore();
+  // moss fleck for tagged entries
+  if (s.entry.tags && s.entry.tags.length && !dim) {
+    ctx.fillStyle = "rgba(122,132,99,0.9)";
+    ctx.beginPath(); ctx.arc(s.x + s.r * 0.4, s.y - s.r * 0.45, 1.6, 0, 7); ctx.fill();
+  }
+  if (isHover) {
+    ctx.strokeStyle = "rgba(53,50,44,0.5)";
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r + 7, 0, 7); ctx.stroke();
+  }
+}
+
+function shouldDim(cl) { return activeCategory && cl.name !== activeCategory; }
+function matches(e) {
+  if (!query) return true;
+  const q = query.toLowerCase();
+  return e.title.toLowerCase().includes(q) || e.path.toLowerCase().includes(q) ||
+         (e.excerpt || "").toLowerCase().includes(q) ||
+         (e.tags || []).some(t => t.toLowerCase().includes(q)) ||
+         (e.date || "").includes(q);
+}
+
+function render() {
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  drawSand();
+  if (!garden || !garden.entries.length) return;
+  for (const cl of clusters) drawCluster(cl);
+  for (const s of stones) if (!(hovered === s)) drawStone(s);
+  if (hovered) drawStone(hovered);
+}
+
+/* ---------- markdown (tiny) ---------- */
+function esc(s) { return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;"); }
+function inline(s) {
+  return s
+    .replace(/`([^`]+)`/g, (_, c) => "<code>" + c + "</code>")
+    .replace(/\*\*([^*]+)\*\*/g, "<strong>$1</strong>")
+    .replace(/\*([^*]+)\*/g, "<em>$1</em>")
+    .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function renderMd(src) {
+  let fm = "";
+  if (src.startsWith("---")) {
+    const end = src.indexOf("\n---", 3);
+    if (end !== -1) { fm = src.slice(4, end).trim(); src = src.slice(end + 4); }
+  }
+  const lines = esc(src).split("\n");
+  const out = [];
+  let inCode = false, listType = null;
+  const closeList = () => { if (listType) { out.push("</" + listType + ">"); listType = null; } };
+  for (const raw of lines) {
+    if (raw.startsWith("```")) {
+      closeList();
+      out.push(inCode ? "</code></pre>" : "<pre><code>");
+      inCode = !inCode; continue;
+    }
+    if (inCode) { out.push(raw); continue; }
+    const line = raw.trimEnd();
+    let m;
+    if ((m = line.match(/^(#{1,4})\s+(.*)/))) {
+      closeList();
+      const l = Math.min(m[1].length, 3);
+      out.push(`<h${l}>` + inline(m[2]) + `</h${l}>`);
+    } else if (/^(-{3,}|\*{3,})$/.test(line)) {
+      closeList(); out.push("<hr>");
+    } else if ((m = line.match(/^\s*[-*+]\s+(.*)/))) {
+      if (listType !== "ul") { closeList(); out.push("<ul>"); listType = "ul"; }
+      out.push("<li>" + inline(m[1]) + "</li>");
+    } else if ((m = line.match(/^\s*\d+\.\s+(.*)/))) {
+      if (listType !== "ol") { closeList(); out.push("<ol>"); listType = "ol"; }
+      out.push("<li>" + inline(m[1]) + "</li>");
+    } else if ((m = line.match(/^>\s?(.*)/))) {
+      closeList(); out.push("<blockquote>" + inline(m[1]) + "</blockquote>");
+    } else if (line === "") {
+      closeList();
+    } else {
+      closeList(); out.push("<p>" + inline(line) + "</p>");
+    }
+  }
+  closeList();
+  return (fm ? `<div class="fm">${esc(fm)}</div>` : "") + out.join("\n");
+}
+
+/* ---------- interactions ---------- */
+const tip = document.getElementById("tip");
+const panel = document.getElementById("panel");
+
+canvas.addEventListener("mousemove", ev => {
+  const x = ev.clientX, y = ev.clientY;
+  let best = null, bestD = 14;
+  for (const s of stones) {
+    const d = Math.hypot(x - s.x, y - s.y) - s.r;
+    if (d < bestD) { bestD = d; best = s; }
+  }
+  if (best !== hovered) {
+    hovered = best;
+    canvas.style.cursor = best ? "pointer" : "default";
+    render();
+  }
+  if (best) {
+    const e = best.entry;
+    tip.innerHTML = `<div class="t">${esc(e.title)}</div>
+      <div class="d">${e.date || "undated"} · ${esc(e.category)}${e.tags.length ? " · " + esc(e.tags.join(", ")) : ""}</div>
+      ${e.excerpt ? `<div class="e">${esc(e.excerpt)}</div>` : ""}`;
+    tip.style.display = "block";
+    const tw = tip.offsetWidth, th = tip.offsetHeight;
+    tip.style.left = Math.min(x + 18, W - tw - 12) + "px";
+    tip.style.top = Math.min(y + 18, H - th - 12) + "px";
+  } else {
+    tip.style.display = "none";
+  }
+});
+
+canvas.addEventListener("click", async () => {
+  if (!hovered) { panel.classList.remove("open"); return; }
+  const e = hovered.entry;
+  const res = await fetch("/api/file?path=" + encodeURIComponent(e.path));
+  const data = await res.json();
+  document.getElementById("ppath").textContent = e.path;
+  document.getElementById("content").innerHTML = renderMd(data.content || "");
+  panel.classList.add("open");
+  document.getElementById("content").scrollTop = 0;
+});
+
+document.getElementById("pclose").addEventListener("click", () => panel.classList.remove("open"));
+document.addEventListener("keydown", ev => {
+  if (ev.key === "Escape") { panel.classList.remove("open"); document.getElementById("search").blur(); }
+  if (ev.key === "/" && document.activeElement !== document.getElementById("search")) {
+    ev.preventDefault(); document.getElementById("search").focus();
+  }
+});
+
+document.getElementById("search").addEventListener("input", ev => {
+  query = ev.target.value.trim();
+  render();
+});
+
+/* ---------- boot ---------- */
+function buildLegend() {
+  const el = document.getElementById("legend");
+  el.innerHTML = "";
+  for (const cl of [...clusters].sort((a, b) => b.count - a.count)) {
+    const sp = document.createElement("span");
+    sp.innerHTML = esc(cl.name) + "<i>" + cl.count + "</i>";
+    sp.addEventListener("click", () => {
+      activeCategory = activeCategory === cl.name ? null : cl.name;
+      el.querySelectorAll("span").forEach(x => x.classList.remove("active"));
+      if (activeCategory) sp.classList.add("active");
+      render();
+    });
+    el.appendChild(sp);
+  }
+}
+
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+  layout(); render();
+}
+window.addEventListener("resize", resize);
+
+async function boot() {
+  try {
+    const res = await fetch("/api/garden");
+    garden = await res.json();
+  } catch (e) {
+    document.getElementById("empty").style.display = "flex";
+    return;
+  }
+  document.getElementById("rootname").textContent = garden.root;
+  document.getElementById("count").textContent = garden.entries.length + " stones";
+  if (!garden.entries.length) document.getElementById("empty").style.display = "flex";
+  resize();
+  buildLegend();
+}
+boot();
+</script>
+</body>
+</html>
