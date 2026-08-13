@@ -14,7 +14,7 @@
 ## 使い方
 
 ```bash
-git clone https://github.com/kusonch9501-afk/karesansui.git
+git clone https://github.com/sonch9501/karesansui.git
 cd karesansui
 python3 server.py            # 同梱のサンプル庭が開く
 python3 server.py ~/notes    # 自分の庭が開く

@@ -18,7 +18,7 @@ Every note-taking tool shows you a list. Lists are inventories. A garden is a *p
 ## Quickstart
 
 ```bash
-git clone https://github.com/kusonch9501-afk/karesansui.git
+git clone https://github.com/sonch9501/karesansui.git
 cd karesansui
 python3 server.py            # opens the bundled sample garden
 python3 server.py ~/notes    # opens YOUR garden
