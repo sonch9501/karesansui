@@ -6,13 +6,13 @@
 <title>枯山水 — karesansui</title>
 <style>
   :root {
-    --sand: #efe9dc;
-    --sand-deep: #e6ded0;
-    --ink: #35322c;
-    --ink-soft: #6b6555;
-    --line: #d8cdb6;
-    --accent: #7a8463;
-    --paper: #f7f3ea;
+    --sand: #d9d6cf;
+    --sand-deep: #cbc7be;
+    --ink: #2c2b27;
+    --ink-soft: #605d55;
+    --line: #b9b5aa;
+    --accent: #6d7560;
+    --paper: #f1efe9;
   }
   * { margin: 0; padding: 0; box-sizing: border-box; }
   html, body { height: 100%; overflow: hidden; }
@@ -30,7 +30,7 @@
   }
   header h1 { font-size: 22px; font-weight: 500; letter-spacing: .35em; }
   header .sub { font-size: 12px; color: var(--ink-soft); letter-spacing: .12em; }
-  header .count { margin-left: auto; font-size: 12px; color: var(--ink-soft); }
+  header .count { font-size: 12px; color: var(--ink-soft); }
 
   #search {
     position: fixed; top: 18px; right: 28px; width: 220px;
@@ -182,14 +182,14 @@ function layout() {
     const frac = Math.sqrt(list.length / total);
     const r = Math.max(34, Math.min(usableW, usableH) * 0.26 * frac + 26);
     let best = null, bestScore = -1;
-    for (let attempt = 0; attempt < 60; attempt++) {
+    for (let attempt = 0; attempt < 140; attempt++) {
       const x = mSide + r + rand() * (usableW - 2 * r);
       const y = mTop + r + rand() * (usableH - 2 * r);
       let minD = Infinity;
       for (const c of centers) minD = Math.min(minD, Math.hypot(x - c.cx, y - c.cy) - c.r - r);
       const score = centers.length ? minD : rand();
       if (score > bestScore) { bestScore = score; best = { x, y }; }
-      if (minD > 40) break;
+      if (minD > 72) break;
     }
     centers.push({ name, list, cx: best.x, cy: best.y, r });
   }
@@ -222,70 +222,99 @@ function layout() {
 }
 
 /* ---------- drawing ---------- */
-function drawSand() {
-  ctx.fillStyle = getComputedStyle(document.body).getPropertyValue("--sand");
-  ctx.fillRect(0, 0, W, H);
-  // fine grain
-  const rand = mulberry32(garden ? garden.seed ^ 0x5eed : 1);
-  ctx.fillStyle = "rgba(120,105,80,0.045)";
-  const grains = Math.floor(W * H / 900);
-  for (let i = 0; i < grains; i++) {
-    ctx.fillRect(rand() * W, rand() * H, 1, 1);
+let gravel = null;
+function makeGravel() {
+  const t = document.createElement("canvas");
+  t.width = t.height = 180;
+  const c = t.getContext("2d");
+  c.fillStyle = "#d9d6cf";
+  c.fillRect(0, 0, 180, 180);
+  const rand = mulberry32((garden ? garden.seed : 7) ^ 0x9e3779);
+  const img = c.getImageData(0, 0, 180, 180);
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = (rand() - 0.5) * 44;
+    img.data[i] += v; img.data[i + 1] += v; img.data[i + 2] += v * 0.96;
   }
-  // long rake lines, slightly wavy
-  ctx.strokeStyle = "rgba(150,135,105,0.22)";
-  ctx.lineWidth = 1;
-  const gap = 11;
-  for (let y = gap; y < H; y += gap) {
-    ctx.beginPath();
-    for (let x = 0; x <= W; x += 24) {
-      const yy = y + Math.sin(x * 0.008 + y * 0.35) * 1.6;
-      x === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
-    }
-    ctx.stroke();
+  c.putImageData(img, 0, 0);
+  // scattered pebbles catching light and shadow
+  for (let i = 0; i < 560; i++) {
+    const x = rand() * 180, y = rand() * 180, r = 0.4 + rand() * 1.5;
+    c.fillStyle = rand() < 0.5 ? "rgba(255,255,255,0.28)" : "rgba(60,58,52,0.20)";
+    c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
+  }
+  gravel = ctx.createPattern(t, "repeat");
+}
+
+// a raked furrow = dark groove + white gravel ridge just above it
+function furrow(pathFn, dark, light) {
+  ctx.strokeStyle = `rgba(56,54,48,${dark})`;
+  ctx.lineWidth = 3;
+  ctx.beginPath(); pathFn(0); ctx.stroke();
+  ctx.strokeStyle = `rgba(255,255,255,${light})`;
+  ctx.lineWidth = 1.7;
+  ctx.beginPath(); pathFn(-2); ctx.stroke();
+}
+
+function drawSand() {
+  if (!gravel) makeGravel();
+  ctx.fillStyle = gravel;
+  ctx.fillRect(0, 0, W, H);
+  const gap = 15;
+  for (let y = gap; y < H + gap; y += gap) {
+    furrow(off => {
+      for (let x = 0; x <= W; x += 18) {
+        const yy = y + off + Math.sin(x * 0.006 + y * 0.31) * 2.2;
+        x === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
+      }
+    }, 0.20, 0.40);
   }
 }
 
-function drawCluster(cl) {
+function drawClusterSand(cl) {
   const dim = shouldDim(cl);
-  // smooth sand pad under the island (erases raking)
-  const pad = cl.r + 10;
-  const g = ctx.createRadialGradient(cl.cx, cl.cy, cl.r * 0.3, cl.cx, cl.cy, pad + 26);
-  g.addColorStop(0, "rgba(239,233,220,1)");
-  g.addColorStop(1, "rgba(239,233,220,0)");
-  ctx.fillStyle = g;
-  ctx.beginPath(); ctx.arc(cl.cx, cl.cy, pad + 26, 0, 7); ctx.fill();
-
-  // concentric ripples
-  for (let k = 0; k < 4; k++) {
-    ctx.strokeStyle = `rgba(150,135,105,${(dim ? 0.05 : 0.19) - k * 0.035})`;
-    ctx.lineWidth = 1.1;
-    ctx.beginPath();
-    const rr = pad + 8 + k * 13;
-    for (let a = 0; a <= Math.PI * 2 + 0.05; a += 0.08) {
-      const wob = Math.sin(a * 5 + cl.cx) * 1.8;
-      const x = cl.cx + Math.cos(a) * (rr + wob);
-      const y = cl.cy + Math.sin(a) * (rr + wob);
-      a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-    }
-    ctx.stroke();
+  const rings = cl.count > 20 ? 6 : 4;
+  const spacing = 13;
+  const pad = cl.r + 8;
+  const outer = pad + rings * spacing;
+  // circular-raked bed erases the straight furrows beneath the island
+  ctx.fillStyle = gravel;
+  ctx.beginPath(); ctx.arc(cl.cx, cl.cy, outer, 0, 7); ctx.fill();
+  const phase = (cl.cx + cl.cy) * 0.07;
+  for (let k = rings; k >= 0; k--) {
+    const rr = pad + k * spacing;
+    const fade = 0.55 + 0.45 * (1 - k / (rings + 1));
+    furrow(off => {
+      for (let a = 0; a <= Math.PI * 2 + 0.06; a += 0.05) {
+        const wob = Math.sin(a * 3 + phase) * 2.6 + Math.sin(a * 7 - phase) * 1.1;
+        const x = cl.cx + Math.cos(a) * (rr + wob + off);
+        const y = cl.cy + Math.sin(a) * (rr + wob + off);
+        a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+      }
+    }, (dim ? 0.07 : 0.24) * fade, (dim ? 0.12 : 0.48) * fade);
   }
-  // label
-  ctx.fillStyle = dim ? "rgba(107,101,85,0.25)" : "rgba(107,101,85,0.85)";
+}
+
+function drawClusterLabel(cl) {
+  const dim = shouldDim(cl);
+  ctx.fillStyle = dim ? "rgba(66,63,56,0.25)" : "rgba(66,63,56,0.9)";
   ctx.font = "12px 'Hiragino Mincho ProN','Yu Mincho',serif";
   ctx.textAlign = "center";
-  ctx.fillText(cl.name, cl.cx, cl.cy + cl.r + 62 > H - 80 ? cl.cy - cl.r - 46 + 32 : cl.cy + cl.r + 56);
+  ctx.fillText(cl.name, cl.cx, cl.cy + cl.r + 62 > H - 80 ? cl.cy - cl.r - 14 : cl.cy + cl.r + 56);
 }
 
 function stonePath(s, scale) {
+  const n = 9, pts = [];
+  for (let i = 0; i < n; i++) {
+    const a = s.rot + (i / n) * Math.PI * 2;
+    const wob = 0.72 + 0.30 * Math.sin(a * 3 + s.blob * 9) * Math.cos(a * 2 - s.blob * 5);
+    pts.push([s.x + Math.cos(a) * s.r * wob * scale,
+              s.y + Math.sin(a) * s.r * wob * 0.82 * scale]);
+  }
   ctx.beginPath();
-  const points = 8;
-  for (let i = 0; i <= points; i++) {
-    const a = s.rot + (i / points) * Math.PI * 2;
-    const wob = 0.78 + 0.28 * Math.sin(a * 3 + s.blob * 9) * Math.cos(a * 2 - s.blob * 5);
-    const x = s.x + Math.cos(a) * s.r * wob * scale;
-    const y = s.y + Math.sin(a) * s.r * wob * 0.86 * scale;
-    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  ctx.moveTo((pts[0][0] + pts[1][0]) / 2, (pts[0][1] + pts[1][1]) / 2);
+  for (let i = 1; i <= n; i++) {
+    const p = pts[i % n], q = pts[(i + 1) % n];
+    ctx.quadraticCurveTo(p[0], p[1], (p[0] + q[0]) / 2, (p[1] + q[1]) / 2);
   }
   ctx.closePath();
 }
@@ -294,27 +323,61 @@ function drawStone(s) {
   const matched = matches(s.entry);
   const dim = (query && !matched) || shouldDim(s.cluster);
   const isHover = hovered === s;
-  const ink = 46 + s.age * 68;           // newer = darker
-  const alpha = dim ? 0.14 : 1;
+  const alpha = dim ? 0.15 : 1;
+  const scale = isHover ? 1.22 : 1;
+  const base = 30 + s.age * 52;          // newer = darker rock
 
-  // shadow
-  ctx.fillStyle = `rgba(90,80,60,${0.16 * alpha})`;
-  ctx.save(); ctx.translate(1.6, 2.2); stonePath(s, 1); ctx.fill(); ctx.restore();
-  // body
-  ctx.fillStyle = `rgba(${ink},${ink - 2},${ink - 6},${alpha})`;
-  stonePath(s, isHover ? 1.25 : 1); ctx.fill();
-  // top highlight
-  ctx.fillStyle = `rgba(255,252,240,${0.13 * alpha})`;
-  ctx.save(); ctx.translate(-s.r * 0.18, -s.r * 0.22); stonePath(s, (isHover ? 1.25 : 1) * 0.55); ctx.fill(); ctx.restore();
+  // soft cast shadow (sun from upper left)
+  const sx = s.x + s.r * 0.35, sy = s.y + s.r * 0.4;
+  const sh = ctx.createRadialGradient(sx, sy, s.r * 0.1, sx, sy, s.r * 1.35);
+  sh.addColorStop(0, `rgba(28,27,23,${0.35 * alpha})`);
+  sh.addColorStop(1, "rgba(28,27,23,0)");
+  ctx.fillStyle = sh;
+  ctx.beginPath(); ctx.arc(sx, sy, s.r * 1.35, 0, 7); ctx.fill();
+
+  // body: top-lit gradient
+  const g = ctx.createLinearGradient(s.x - s.r, s.y - s.r, s.x + s.r * 0.7, s.y + s.r);
+  g.addColorStop(0, `rgba(${base + 78},${base + 76},${base + 68},${alpha})`);
+  g.addColorStop(0.45, `rgba(${base + 20},${base + 18},${base + 12},${alpha})`);
+  g.addColorStop(1, `rgba(${Math.max(8, base - 14)},${Math.max(8, base - 14)},${Math.max(6, base - 18)},${alpha})`);
+  ctx.fillStyle = g;
+  stonePath(s, scale); ctx.fill();
+
+  // facets and weathering, clipped to the rock
+  if (!dim) {
+    ctx.save();
+    stonePath(s, scale); ctx.clip();
+    const fr = mulberry32(hashStr(s.entry.id));
+    for (let f = 0; f < 3; f++) {
+      const a0 = fr() * Math.PI * 2, a1 = a0 + 0.7 + fr() * 1.2;
+      ctx.fillStyle = f === 0 ? "rgba(255,255,255,0.13)" : `rgba(0,0,0,${0.10 + fr() * 0.14})`;
+      ctx.beginPath();
+      ctx.moveTo(s.x + Math.cos(a0) * s.r * 0.1, s.y + Math.sin(a0) * s.r * 0.1);
+      ctx.lineTo(s.x + Math.cos(a0) * s.r * 1.5, s.y + Math.sin(a0) * s.r * 1.5);
+      ctx.lineTo(s.x + Math.cos(a1) * s.r * 1.5, s.y + Math.sin(a1) * s.r * 1.5);
+      ctx.closePath(); ctx.fill();
+    }
+    // crown light
+    ctx.save(); ctx.translate(-s.r * 0.16, -s.r * 0.22);
+    stonePath(s, scale * 0.62);
+    ctx.fillStyle = "rgba(255,255,255,0.12)"; ctx.fill();
+    ctx.restore();
+    ctx.restore();
+  }
+  // contact edge
+  ctx.strokeStyle = `rgba(18,17,14,${0.4 * alpha})`;
+  ctx.lineWidth = 1;
+  stonePath(s, scale); ctx.stroke();
+
   // moss fleck for tagged entries
   if (s.entry.tags && s.entry.tags.length && !dim) {
-    ctx.fillStyle = "rgba(122,132,99,0.9)";
+    ctx.fillStyle = "rgba(109,117,96,0.9)";
     ctx.beginPath(); ctx.arc(s.x + s.r * 0.4, s.y - s.r * 0.45, 1.6, 0, 7); ctx.fill();
   }
   if (isHover) {
-    ctx.strokeStyle = "rgba(53,50,44,0.5)";
+    ctx.strokeStyle = "rgba(44,43,39,0.55)";
     ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.arc(s.x, s.y, s.r + 7, 0, 7); ctx.stroke();
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r + 8, 0, 7); ctx.stroke();
   }
 }
 
@@ -332,7 +395,13 @@ function render() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   drawSand();
   if (!garden || !garden.entries.length) return;
-  for (const cl of clusters) drawCluster(cl);
+  for (const cl of clusters) drawClusterSand(cl);
+  // grain pass over the furrows to unify everything into one bed of gravel
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = gravel;
+  ctx.fillRect(0, 0, W, H);
+  ctx.globalAlpha = 1;
+  for (const cl of clusters) drawClusterLabel(cl);
   for (const s of stones) if (!(hovered === s)) drawStone(s);
   if (hovered) drawStone(hovered);
 }
