@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ja">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -105,28 +105,72 @@
     flex-direction: column; gap: 10px; color: var(--ink-soft); text-align: center;
   }
   #empty .big { font-size: 40px; letter-spacing: .3em; color: var(--line); }
+
+  :root { --sand: #e5e1d8; --sans: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", sans-serif; }
+  header { padding: 28px 36px 54px; background: linear-gradient(var(--sand) 40%, transparent); }
+  header .sub, header .count, #search, #legend, .d, .path, .note-meta, #search-state { font-family: var(--sans); }
+  header .sub { max-width: 24vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  #search { top: 24px; right: 36px; }
+  #search::placeholder { color: var(--ink-soft); }
+  #search-state { position: fixed; top: 67px; right: 36px; font-size: 11px; color: var(--ink-soft); display: flex; gap: 14px; align-items: center; }
+  button { font: inherit; color: inherit; cursor: pointer; }
+  #reset { background: none; border: 0; text-decoration: underline; min-height: 32px; }
+  [hidden] { display: none !important; }
+  #legend { padding: 35px 36px 18px; background: linear-gradient(transparent, var(--sand) 45%); gap: 4px 24px; }
+  #legend button { border: 0; border-bottom: 2px solid transparent; background: none; padding: 10px 0; font-size: 13px; letter-spacing: .06em; }
+  #legend button.active { color: #4e6044; border-bottom-color: var(--accent); }
+  #legend button:hover { color: var(--ink); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 4px; }
+  #search:focus-visible { outline: 2px solid var(--accent); }
+  #panel { visibility: hidden; transition: transform .3s cubic-bezier(.2,.7,.2,1), visibility .3s; }
+  #panel.open { visibility: visible; }
+  #panel .bar button { min-width: 44px; min-height: 44px; }
+  #content { overflow-wrap: anywhere; padding: 28px 32px 60px; }
+  #content .note-title { font-size: 25px; font-weight: 500; line-height: 1.5; }
+  .note-meta { font-size: 12px; color: var(--ink-soft); margin-bottom: 24px; line-height: 1.8; }
+  #content .fm { background: transparent; border-bottom: 1px solid var(--line); white-space: normal; padding: 10px 0; }
+  .fm summary { cursor: pointer; font-family: var(--sans); }
+  #content .fm pre { white-space: pre-wrap; }
+  #no-results { position: fixed; top: 48%; left: 50%; transform: translate(-50%, -50%); background: var(--paper); padding: 22px 28px; text-align: center; line-height: 1.9; pointer-events: none; }
+  #no-results small { color: var(--ink-soft); }
+  @media (max-width: 640px) {
+    header { padding: 20px 22px 90px; gap: 10px; }
+    header h1 { font-size: 21px; }
+    header .sub { max-width: 32vw; }
+    #search, #search:focus { top: 66px; left: 22px; right: 22px; width: calc(100% - 44px); font-size: 16px; }
+    #search-state { top: 110px; left: 22px; right: 22px; justify-content: space-between; }
+    #legend { flex-wrap: nowrap; overflow-x: auto; padding: 28px 22px calc(12px + env(safe-area-inset-bottom)); }
+    #legend button { flex: 0 0 auto; min-height: 44px; }
+    #panel { top: auto; height: 72dvh; width: 100%; border-left: 0; border-top: 1px solid var(--line); border-radius: 18px 18px 0 0; transform: translateY(102%); }
+    #panel.open { transform: translateY(0); }
+    #content { padding: 20px 24px calc(40px + env(safe-area-inset-bottom)); font-size: 16px; }
+    #tip { display: none !important; }
+  }
+  @media (prefers-reduced-motion: reduce) { *, #panel { transition: none !important; } }
 </style>
 </head>
 <body>
-<canvas id="garden"></canvas>
+<canvas id="garden" tabindex="0" aria-label="ノートの庭。左右矢印で石を選び、Enterで開く"></canvas>
 <header>
   <h1>枯山水</h1>
   <span class="sub" id="rootname"></span>
   <span class="count" id="count"></span>
 </header>
-<input id="search" type="text" placeholder="search the garden…" autocomplete="off">
-<div id="legend"></div>
+<input id="search" type="text" placeholder="庭のノートを探す  /" aria-label="庭のノートを検索" autocomplete="off">
+<div id="search-state"><span id="result-count" role="status" aria-live="polite"></span><button id="reset" hidden>絞り込みを解除</button></div>
+<nav id="legend" aria-label="カテゴリ"></nav>
+<div id="no-results" hidden>見つかりませんでした<br><small>言葉やカテゴリを変えてみてください</small></div>
 <div id="tip"></div>
-<div id="panel">
+<aside id="panel" aria-label="ノート本文" inert>
   <div class="bar">
     <span class="path" id="ppath"></span>
-    <button id="pclose" title="close">×</button>
+    <button id="pclose" title="閉じる" aria-label="ノートを閉じる">×</button>
   </div>
-  <div id="content"></div>
-</div>
+  <div id="content" aria-live="polite"></div>
+</aside>
 <div id="empty">
   <div class="big">無</div>
-  <div>no markdown files found in this garden.<br>point the server at a folder of .md files:</div>
+  <div>この庭にはまだノートがありません。<br>Markdownのあるフォルダを指定してください。</div>
   <code>python3 server.py ~/your/notes</code>
 </div>
 
@@ -156,6 +200,9 @@ let garden = null;          // api payload
 let clusters = [];          // {name, cx, cy, r, count, stones:[]}
 let stones = [];            // {x, y, r, entry, cluster, shade}
 let hovered = null;
+let selectedId = null;
+let requestId = 0;
+let returnFocus = null;
 let query = "";
 let activeCategory = null;
 
@@ -172,16 +219,17 @@ function layout() {
   }
   const cats = [...byCat.entries()].sort((a, b) => b[1].length - a[1].length);
 
-  const mTop = 90, mBot = 70, mSide = 90;
-  const usableW = W - mSide * 2, usableH = H - mTop - mBot;
+  const mobile = W <= 640;
+  const mTop = mobile ? 165 : 130, mBot = 105, mSide = mobile ? 24 : 80;
+  const usableW = Math.max(80, W - mSide * 2), usableH = Math.max(80, H - mTop - mBot);
   const total = garden.entries.length;
 
   // place cluster centers with rejection sampling (deterministic)
   const centers = [];
   for (const [name, list] of cats) {
     const frac = Math.sqrt(list.length / total);
-    const r = Math.max(34, Math.min(usableW, usableH) * 0.26 * frac + 26);
-    let best = null, bestScore = -1;
+    const r = Math.max(20, Math.min(usableW, usableH) * (mobile ? 0.18 : 0.23) * frac + (mobile ? 10 : 24));
+    let best = null, bestScore = -Infinity;
     for (let attempt = 0; attempt < 140; attempt++) {
       const x = mSide + r + rand() * (usableW - 2 * r);
       const y = mTop + r + rand() * (usableH - 2 * r);
@@ -202,12 +250,12 @@ function layout() {
     for (let i = 0; i < n; i++) {
       const e = c.list[i];
       const er = mulberry32(hashStr(e.path));
-      const rad = c.r * 0.82 * Math.sqrt((i + 0.6) / n);
+      const rad = c.r * 0.70 * Math.sqrt((i + 0.6) / n);
       const ang = i * 2.39996 + er() * 0.9;
       const x = c.cx + Math.cos(ang) * rad * (0.85 + er() * 0.3);
       const y = c.cy + Math.sin(ang) * rad * (0.85 + er() * 0.3);
       const density = Math.max(1, Math.min(2.1, 60 / total + 1));
-      const size = (5 + Math.min(12, Math.log2(1 + e.size / 250) * 3)) * density;
+      const size = Math.min(c.r * 0.5, (7 + Math.min(12, Math.log2(1 + e.size / 250) * 3)) * density);
       // newer entries are darker ink; undated sit mid-tone
       let age = 0.5;
       if (e.date) {
@@ -227,19 +275,19 @@ function makeGravel() {
   const t = document.createElement("canvas");
   t.width = t.height = 180;
   const c = t.getContext("2d");
-  c.fillStyle = "#d9d6cf";
+  c.fillStyle = "#e5e1d8";
   c.fillRect(0, 0, 180, 180);
   const rand = mulberry32((garden ? garden.seed : 7) ^ 0x9e3779);
   const img = c.getImageData(0, 0, 180, 180);
   for (let i = 0; i < img.data.length; i += 4) {
-    const v = (rand() - 0.5) * 44;
+    const v = (rand() - 0.5) * 18;
     img.data[i] += v; img.data[i + 1] += v; img.data[i + 2] += v * 0.96;
   }
   c.putImageData(img, 0, 0);
   // scattered pebbles catching light and shadow
-  for (let i = 0; i < 560; i++) {
+  for (let i = 0; i < 220; i++) {
     const x = rand() * 180, y = rand() * 180, r = 0.4 + rand() * 1.5;
-    c.fillStyle = rand() < 0.5 ? "rgba(255,255,255,0.28)" : "rgba(60,58,52,0.20)";
+    c.fillStyle = rand() < 0.5 ? "rgba(255,255,255,0.18)" : "rgba(60,58,52,0.09)";
     c.beginPath(); c.arc(x, y, r, 0, 7); c.fill();
   }
   gravel = ctx.createPattern(t, "repeat");
@@ -259,47 +307,63 @@ function drawSand() {
   if (!gravel) makeGravel();
   ctx.fillStyle = gravel;
   ctx.fillRect(0, 0, W, H);
-  const gap = 15;
+  const gap = 19;
   for (let y = gap; y < H + gap; y += gap) {
     furrow(off => {
       for (let x = 0; x <= W; x += 18) {
         const yy = y + off + Math.sin(x * 0.006 + y * 0.31) * 2.2;
         x === 0 ? ctx.moveTo(x, yy) : ctx.lineTo(x, yy);
       }
-    }, 0.20, 0.40);
+    }, 0.065, 0.16);
   }
 }
 
-function drawClusterSand(cl) {
-  const dim = shouldDim(cl);
-  const rings = cl.count > 20 ? 6 : 4;
-  const spacing = 13;
-  const pad = cl.r + 8;
-  const outer = pad + rings * spacing;
-  // circular-raked bed erases the straight furrows beneath the island
-  ctx.fillStyle = gravel;
-  ctx.beginPath(); ctx.arc(cl.cx, cl.cy, outer, 0, 7); ctx.fill();
-  const phase = (cl.cx + cl.cy) * 0.07;
-  for (let k = rings; k >= 0; k--) {
-    const rr = pad + k * spacing;
-    const fade = 0.55 + 0.45 * (1 - k / (rings + 1));
-    furrow(off => {
-      for (let a = 0; a <= Math.PI * 2 + 0.06; a += 0.05) {
-        const wob = Math.sin(a * 3 + phase) * 2.6 + Math.sin(a * 7 - phase) * 1.1;
-        const x = cl.cx + Math.cos(a) * (rr + wob + off);
-        const y = cl.cy + Math.sin(a) * (rr + wob + off);
-        a === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
-      }
-    }, (dim ? 0.07 : 0.24) * fade, (dim ? 0.12 : 0.48) * fade);
+// Each island keeps its seeded character; outer contours taper toward neighbours.
+function islandPoint(cl, a, extra) {
+  const phase = hashStr(cl.name) / 4294967296 * Math.PI * 2;
+  const shape = 1 + Math.sin(a * 3 + phase) * .07 + Math.cos(a * 2 - phase) * .09;
+  let radius = (cl.r + extra) * shape;
+  for (const other of clusters) {
+    if (other === cl) continue;
+    const dx = other.cx - cl.cx, dy = other.cy - cl.cy;
+    const projection = dx * Math.cos(a) + dy * Math.sin(a);
+    if (projection > 0) {
+      const boundary = (dx * dx + dy * dy) / (2 * projection) - 8;
+      const limit = Math.max(8, boundary);
+      const blend = Math.max(0, 1 - Math.abs(radius - limit) / 18);
+      radius = Math.min(radius, limit) - blend * blend * 4.5;
+    }
+  }
+  return [cl.cx + Math.cos(a) * radius, cl.cy + Math.sin(a) * radius * .88];
+}
+function islandPath(cl, extra) {
+  for (let i = 0; i <= 160; i++) {
+    const [x, y] = islandPoint(cl, i / 160 * Math.PI * 2, extra);
+    if (!i) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+  }
+  ctx.closePath();
+}
+function drawClusterSand(cl, bedOnly = false) {
+  const spacing = W <= 640 ? 7 : 11;
+  if (bedOnly) {
+    ctx.fillStyle = gravel;
+    ctx.beginPath(); islandPath(cl, spacing * 4 + 8); ctx.fill();
+    return;
+  }
+  for (let k = 4; k >= 0; k--) {
+    const fade = (1 - k * .12) * (shouldDim(cl) ? .3 : 1);
+    furrow(off => islandPath(cl, 8 + k * spacing + off), .17 * fade, .34 * fade);
   }
 }
-
 function drawClusterLabel(cl) {
-  const dim = shouldDim(cl);
-  ctx.fillStyle = dim ? "rgba(66,63,56,0.25)" : "rgba(66,63,56,0.9)";
-  ctx.font = "12px 'Hiragino Mincho ProN','Yu Mincho',serif";
+  const y = cl.cy + cl.r * .88 + (W <= 640 ? 43 : 62);
+  ctx.font = "13px 'Hiragino Kaku Gothic ProN',sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText(cl.name, cl.cx, cl.cy + cl.r + 62 > H - 80 ? cl.cy - cl.r - 14 : cl.cy + cl.r + 56);
+  const width = ctx.measureText(cl.name).width + 20;
+  ctx.fillStyle = "rgba(229,225,216,.88)";
+  ctx.fillRect(cl.cx - width / 2, y - 14, width, 22);
+  ctx.fillStyle = shouldDim(cl) ? "rgba(66,63,56,.35)" : "#605d55";
+  ctx.fillText(cl.name, cl.cx, y);
 }
 
 function stonePath(s, scale) {
@@ -372,9 +436,15 @@ function drawStone(s) {
   // moss fleck for tagged entries
   if (s.entry.tags && s.entry.tags.length && !dim) {
     ctx.fillStyle = "rgba(109,117,96,0.9)";
-    ctx.beginPath(); ctx.arc(s.x + s.r * 0.4, s.y - s.r * 0.45, 1.6, 0, 7); ctx.fill();
+    ctx.save(); stonePath(s, scale); ctx.clip();
+    for (let i = 0; i < 7; i++) {
+      const a = -1.3 + i * .17;
+      ctx.beginPath(); ctx.ellipse(s.x + Math.cos(a) * s.r * .55,
+        s.y + Math.sin(a) * s.r * .53, s.r * (.13 + .03 * Math.sin(i * 4)), s.r * .09, a, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   }
-  if (isHover) {
+  if (isHover || (selectedId === s.entry.id && !dim)) {
     ctx.strokeStyle = "rgba(44,43,39,0.55)";
     ctx.lineWidth = 1;
     ctx.beginPath(); ctx.arc(s.x, s.y, s.r + 8, 0, 7); ctx.stroke();
@@ -395,6 +465,7 @@ function render() {
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
   drawSand();
   if (!garden || !garden.entries.length) return;
+  for (const cl of clusters) drawClusterSand(cl, true);
   for (const cl of clusters) drawClusterSand(cl);
   // grain pass over the furrows to unify everything into one bed of gravel
   ctx.globalAlpha = 0.22;
@@ -455,61 +526,104 @@ function renderMd(src) {
     }
   }
   closeList();
-  return (fm ? `<div class="fm">${esc(fm)}</div>` : "") + out.join("\n");
+  return (fm ? `<details class="fm"><summary>ノートの詳細</summary><pre>${esc(fm)}</pre></details>` : "") + out.join("\n");
 }
 
 /* ---------- interactions ---------- */
 const tip = document.getElementById("tip");
 const panel = document.getElementById("panel");
 
-canvas.addEventListener("mousemove", ev => {
-  const x = ev.clientX, y = ev.clientY;
-  let best = null, bestD = 14;
+function visibleStone(s) { return matches(s.entry) && !shouldDim(s.cluster); }
+function hitStone(x, y) {
+  let best = null, distance = Infinity;
   for (const s of stones) {
-    const d = Math.hypot(x - s.x, y - s.y) - s.r;
-    if (d < bestD) { bestD = d; best = s; }
+    if (!visibleStone(s)) continue;
+    const d = Math.hypot(x - s.x, y - s.y);
+    if (d <= Math.max(24, s.r + 10) && d < distance) { best = s; distance = d; }
   }
-  if (best !== hovered) {
-    hovered = best;
-    canvas.style.cursor = best ? "pointer" : "default";
+  return best;
+}
+function clearHover() { hovered = null; tip.style.display = "none"; canvas.style.cursor = "default"; }
+canvas.addEventListener("pointermove", ev => {
+  if (ev.pointerType === "touch") return;
+  const best = hitStone(ev.clientX, ev.clientY);
+  if (hovered !== best) { hovered = best; render(); }
+  canvas.style.cursor = best ? "pointer" : "default";
+  if (!best) { tip.style.display = "none"; return; }
+  const e = best.entry;
+  tip.innerHTML = `<div class="t">${esc(e.title)}</div><div class="d">${e.date || "日付なし"} · ${esc(e.category)}</div><div class="e">${esc(e.excerpt || "")}</div>`;
+  tip.style.display = "block";
+  tip.style.left = Math.max(12, Math.min(ev.clientX + 18, W - tip.offsetWidth - 12)) + "px";
+  tip.style.top = Math.max(12, Math.min(ev.clientY + 18, H - tip.offsetHeight - 12)) + "px";
+});
+canvas.addEventListener("pointerleave", () => { clearHover(); render(); });
+function closePanel() {
+  requestId++;
+  panel.classList.remove("open"); panel.inert = true;
+  selectedId = null; render();
+  if (returnFocus) { returnFocus.focus({ preventScroll: true }); returnFocus = null; }
+}
+async function openStone(s) {
+  const e = s.entry, currentRequest = ++requestId;
+  if (!panel.classList.contains("open")) returnFocus = document.activeElement;
+  selectedId = e.id; clearHover(); render();
+  document.getElementById("ppath").textContent = e.path;
+  const content = document.getElementById("content");
+  content.textContent = "ノートを開いています…";
+  panel.inert = false; panel.classList.add("open");
+  document.getElementById("pclose").focus({ preventScroll: true });
+  try {
+    const res = await fetch("/api/file?path=" + encodeURIComponent(e.path));
+    if (!res.ok) throw new Error("file unavailable");
+    const data = await res.json();
+    if (currentRequest !== requestId) return;
+    const body = renderMd(data.content || "").replace(/<h1>.*?<\/h1>/, "");
+    content.innerHTML = `<h1 class="note-title">${esc(e.title)}</h1><div class="note-meta">${e.date || "日付なし"} · ${esc(e.category)}${e.tags.length ? "<br>" + e.tags.map(t => "#" + esc(t)).join("　") : ""}</div>` + body;
+    content.scrollTop = 0;
+  } catch (err) {
+    if (currentRequest === requestId) content.textContent = "ノートを読み込めませんでした。閉じて、もう一度石を選んでください。";
+  }
+}
+canvas.addEventListener("click", ev => {
+  const s = hitStone(ev.clientX, ev.clientY);
+  if (s) openStone(s); else closePanel();
+});
+canvas.addEventListener("keydown", ev => {
+  const visible = stones.filter(visibleStone);
+  if (!visible.length) return;
+  if (ev.key === "ArrowRight" || ev.key === "ArrowLeft") {
+    ev.preventDefault();
+    const index = visible.indexOf(hovered);
+    hovered = visible[(index + (ev.key === "ArrowRight" ? 1 : visible.length - 1) + visible.length) % visible.length];
+    document.getElementById("result-count").textContent = hovered.entry.title;
     render();
   }
-  if (best) {
-    const e = best.entry;
-    tip.innerHTML = `<div class="t">${esc(e.title)}</div>
-      <div class="d">${e.date || "undated"} · ${esc(e.category)}${e.tags.length ? " · " + esc(e.tags.join(", ")) : ""}</div>
-      ${e.excerpt ? `<div class="e">${esc(e.excerpt)}</div>` : ""}`;
-    tip.style.display = "block";
-    const tw = tip.offsetWidth, th = tip.offsetHeight;
-    tip.style.left = Math.min(x + 18, W - tw - 12) + "px";
-    tip.style.top = Math.min(y + 18, H - th - 12) + "px";
-  } else {
-    tip.style.display = "none";
-  }
+  if (ev.key === "Enter" && hovered) { ev.preventDefault(); openStone(hovered); }
 });
-
-canvas.addEventListener("click", async () => {
-  if (!hovered) { panel.classList.remove("open"); return; }
-  const e = hovered.entry;
-  const res = await fetch("/api/file?path=" + encodeURIComponent(e.path));
-  const data = await res.json();
-  document.getElementById("ppath").textContent = e.path;
-  document.getElementById("content").innerHTML = renderMd(data.content || "");
-  panel.classList.add("open");
-  document.getElementById("content").scrollTop = 0;
-});
-
-document.getElementById("pclose").addEventListener("click", () => panel.classList.remove("open"));
+document.getElementById("pclose").addEventListener("click", closePanel);
 document.addEventListener("keydown", ev => {
-  if (ev.key === "Escape") { panel.classList.remove("open"); document.getElementById("search").blur(); }
+  if (ev.key === "Escape") { closePanel(); document.getElementById("search").blur(); }
   if (ev.key === "/" && document.activeElement !== document.getElementById("search")) {
     ev.preventDefault(); document.getElementById("search").focus();
   }
 });
-
-document.getElementById("search").addEventListener("input", ev => {
-  query = ev.target.value.trim();
+function updateFilters() {
+  clearHover();
+  if (selectedId && !stones.some(s => s.entry.id === selectedId && visibleStone(s))) closePanel();
+  const count = stones.filter(visibleStone).length;
+  document.getElementById("result-count").textContent = query || activeCategory ? `${stones.length}石のうち${count}石` : "石を選んで、ノートをひらく";
+  document.getElementById("reset").hidden = !(query || activeCategory);
+  document.getElementById("no-results").hidden = count > 0 || !stones.length;
+  document.querySelectorAll("#legend button").forEach(el => {
+    const active = el.dataset.category === activeCategory;
+    el.classList.toggle("active", active); el.setAttribute("aria-pressed", String(active));
+  });
   render();
+}
+document.getElementById("search").addEventListener("input", ev => { query = ev.target.value.trim(); updateFilters(); });
+document.getElementById("reset").addEventListener("click", () => {
+  query = ""; activeCategory = null; document.getElementById("search").value = "";
+  updateFilters(); document.getElementById("search").focus();
 });
 
 /* ---------- boot ---------- */
@@ -517,13 +631,13 @@ function buildLegend() {
   const el = document.getElementById("legend");
   el.innerHTML = "";
   for (const cl of [...clusters].sort((a, b) => b.count - a.count)) {
-    const sp = document.createElement("span");
-    sp.innerHTML = esc(cl.name) + "<i>" + cl.count + "</i>";
+    const sp = document.createElement("button");
+    sp.innerHTML = esc(cl.name) + " <i>" + cl.count + "</i>";
+    sp.dataset.category = cl.name;
+    sp.setAttribute("aria-pressed", String(activeCategory === cl.name));
     sp.addEventListener("click", () => {
       activeCategory = activeCategory === cl.name ? null : cl.name;
-      el.querySelectorAll("span").forEach(x => x.classList.remove("active"));
-      if (activeCategory) sp.classList.add("active");
-      render();
+      updateFilters();
     });
     el.appendChild(sp);
   }
@@ -534,7 +648,7 @@ function resize() {
   W = window.innerWidth; H = window.innerHeight;
   canvas.width = W * DPR; canvas.height = H * DPR;
   canvas.style.width = W + "px"; canvas.style.height = H + "px";
-  layout(); render();
+  clearHover(); layout(); render();
 }
 window.addEventListener("resize", resize);
 
@@ -547,10 +661,11 @@ async function boot() {
     return;
   }
   document.getElementById("rootname").textContent = garden.root;
-  document.getElementById("count").textContent = garden.entries.length + " stones";
+  document.getElementById("count").textContent = garden.entries.length + " 石";
   if (!garden.entries.length) document.getElementById("empty").style.display = "flex";
   resize();
   buildLegend();
+  updateFilters();
 }
 boot();
 </script>
